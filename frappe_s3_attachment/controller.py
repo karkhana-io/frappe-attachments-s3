@@ -8,6 +8,7 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 import frappe
 import magic
+from frappe_s3_attachment.utility import s3_settings
 
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -198,7 +199,9 @@ class S3Operations(object):
 
 @frappe.whitelist()
 def file_upload_to_s3(doc, method):
-    frappe.enqueue("frappe_s3_attachment.controller.file_upload_to_s3_job", doc=doc, queue="short")
+    settings = s3_settings()
+    if settings.switch_for_hook:
+        frappe.enqueue("frappe_s3_attachment.controller.file_upload_to_s3_job", doc=doc, queue="short")
 
 def file_upload_to_s3_job(doc):
     """
@@ -224,6 +227,22 @@ def file_upload_to_s3_job(doc):
                 doc.is_private, parent_doctype,
                 parent_name
             )
+    s3_upload = S3Operations()
+    path = doc.file_url
+    site_path = frappe.utils.get_site_path()
+    parent_doctype = doc.attached_to_doctype or 'File'
+    parent_name = doc.attached_to_name
+    ignore_s3_upload_for_doctype = frappe.local.conf.get('ignore_s3_upload_for_doctype') or ['Data Import']
+    if parent_doctype not in ignore_s3_upload_for_doctype:
+        if not doc.is_private:
+            file_path = site_path + '/public' + path
+        else:
+            file_path = site_path + path
+        key = s3_upload.upload_files_to_s3_with_key(
+            file_path, doc.file_name,
+            doc.is_private, parent_doctype,
+            parent_name
+        )
 
             method = "frappe_s3_attachment.controller.generate_file"
             file_url = """/api/method/{0}?key={1}&file_name={2}""".format(method, key, doc.file_name)
@@ -337,8 +356,10 @@ def migrate_existing_files():
 
 def delete_from_cloud(doc, method):
     """Delete file from s3"""
-    s3 = S3Operations()
-    s3.delete_from_s3(doc.content_hash)
+    settings = s3_settings()
+    if settings.switch_for_hook:
+        s3 = S3Operations()
+        s3.delete_from_s3(doc.content_hash)
 
 
 @frappe.whitelist()
