@@ -207,6 +207,10 @@ def file_upload_to_s3_job(doc):
     """
     check and upload files to s3. the path check and
     """
+    file_url = ""
+    key = ""
+    signed_s3_url = ""
+    message = "error"
     try:
         if doc.s3_url:
             return   
@@ -238,10 +242,13 @@ def file_upload_to_s3_job(doc):
             
             # if parent_doctype and frappe.get_meta(parent_doctype).get('image_field'):
             #     frappe.db.set_value(parent_doctype, parent_name, frappe.get_meta(parent_doctype).get('image_field'), file_url)
-
+            
             frappe.db.commit()
+            message = "success"
     except Exception as e:
         frappe.log_error(title="S3 Bucket Faild",message=frappe.get_traceback())
+    
+    return {"file_url":file_url,"key":key,"signed_s3_url":signed_s3_url,"doc_name":doc.name,"message":message}
 
 def download_s3_file(key):
     s3_download = S3Operations()
